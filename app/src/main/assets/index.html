@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#071b18"><title>Snake 3D</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071b18;color:#effff7;font-family:system-ui,Arial;touch-action:none}
+#app{height:100dvh;display:flex;flex-direction:column;padding:10px;gap:8px;background:radial-gradient(ellipse at 50% 0,#16483a,#071b18 65%)}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+h1{font-size:22px;margin:0;color:#a8ffbd;text-shadow:0 2px 12px #36e87966}
+.stats{display:flex;gap:6px;flex-wrap:wrap}.pill{background:#12352d;border:1px solid #2c7158;border-radius:12px;padding:6px 10px;font-size:13px}
+#boardWrap{position:relative;flex:1;min-height:0;border:2px solid #277557;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px #0008;background:linear-gradient(145deg,#0b2d25,#071c19)}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+#overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#00140fc9;text-align:center;padding:20px}
+#overlay.show{display:flex}.panel{background:#10352b;border:1px solid #4a9a70;border-radius:18px;padding:20px;max-width:280px}
+button{border:1px solid #438e68;border-radius:12px;background:linear-gradient(#236d4b,#12452f);color:white;padding:10px 13px;font-weight:700;font-size:14px;box-shadow:0 3px 0 #092b1d}
+button:active{transform:translateY(2px);box-shadow:0 1px 0 #092b1d}
+.controls{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:112px}
+#joyArea{width:112px;height:100px;position:relative;touch-action:none;flex:none}
+#joyBase{position:absolute;width:100px;height:100px;left:6px;top:0;border-radius:50%;background:#ffffff18;border:2px solid #6ccf9b88;box-shadow:inset 0 0 18px #0008}
+#joyKnob{position:absolute;width:42px;height:42px;left:35px;top:29px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#d8ffe4,#35b66d 60%,#14653b);border:2px solid #c2ffd3;box-shadow:0 4px 12px #0008}
+.actions{display:grid;grid-template-columns:repeat(2,auto);gap:7px;justify-content:end}
+.upgrades{display:flex;gap:7px;flex-wrap:wrap;justify-content:center}
+.small{font-size:11px;color:#b8dcca;text-align:center}
+</style></head>
+<body><div id="app">
+<header><h1>🐍 Snake 3D</h1><div class="stats"><div class="pill">Skóre: <b id="score">0</b></div><div class="pill">Rekord: <b id="best">0</b></div><div class="pill">💰 <b id="money">0</b></div></div></header>
+<div id="boardWrap"><canvas id="game"></canvas><div id="overlay"><div class="panel"><h2 id="overTitle">Konec hry</h2><p id="overText">Skóre: 0</p><button id="again">Hrát znovu</button></div></div></div>
+<div class="controls"><div id="joyArea"><div id="joyBase"></div><div id="joyKnob"></div></div><div class="actions"><button id="pause">⏸ Pauza</button><button id="restart">↻ Restart</button></div></div>
+<div class="upgrades"><button id="speed">⚡ Rychlost: 2/s</button><button id="income">💎 Příjem: +0%</button></div>
+<div class="small">Táhni joystickem libovolným směrem • Okraje tě přenesou na druhou stranu</div>
+</div>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+let W=0,H=0,dpr=1, snake=[], food=[], score=0,money=0,best=0, speedLevel=0,incomeLevel=0;
+let paused=false,over=false,last=0,acc=0,dir={x:1,y:0},target={x:1,y:0},head={x:0,y:0},spacing=18;
+const speed=()=>2+speedLevel*.5, income=()=>1+incomeLevel*.1;
+function resize(){let r=canvas.getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);W=r.width;H=r.height;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);spacing=Math.max(15,Math.min(22,W/18));if(!snake.length)reset();}
+window.addEventListener('resize',resize);
+function reset(){score=0;over=false;paused=false;dir={x:1,y:0};target={x:1,y:0};head={x:W*.45,y:H*.5};snake=[];for(let i=0;i<14;i++)snake.push({x:head.x-i*spacing,y:head.y});food=[];for(let i=0;i<4;i++)spawn();$('overlay').classList.remove('show');$('pause').textContent='⏸ Pauza';ui();}
+function spawn(){let types=[{c:'#ff5364',v:1},{c:'#45b9ff',v:3},{c:'#ffd34d',v:5}];let t=types[Math.floor(Math.random()*3)];food.push({x:25+Math.random()*Math.max(1,W-50),y:25+Math.random()*Math.max(1,H-50),...t,r:9});}
+function ui(){$('score').textContent=score;$('best').textContent=best;$('money').textContent=Math.floor(money);$('speed').textContent=`⚡ Rychlost: ${speed()}/s`; $('income').textContent=`💎 Příjem: +${incomeLevel*10}%`;}
+function gameOver(){over=true;$('overTitle').textContent='Konec hry';$('overText').textContent='Skóre: '+score+' • Peníze: '+Math.floor(money);$('overlay').classList.add('show');}
+function step(dt){let len=Math.hypot(target.x,target.y);if(len>.12){let tx=target.x/len,ty=target.y/len;let cross=dir.x*ty-dir.y*tx;if(Math.abs(cross)>.015){let a=Math.atan2(dir.y,dir.x),b=Math.atan2(ty,tx),diff=Math.atan2(Math.sin(b-a),Math.cos(b-a));let turn=Math.sign(diff)*Math.min(Math.abs(diff),dt*5.5);dir={x:Math.cos(a+turn),y:Math.sin(a+turn)};}}
+let dist=spacing*speed()*dt;head={x:head.x+dir.x*dist,y:head.y+dir.y*dist};
+if(head.x<0)head.x=W; if(head.x>W)head.x=0;if(head.y<0)head.y=H;if(head.y>H)head.y=0;
+snake.unshift({...head});while(snake.length>Math.max(14,Math.floor(14+score*1.5)))snake.pop();
+for(let i=8;i<snake.length;i++){let dx=snake[i].x-head.x,dy=snake[i].y-head.y;if(dx*dx+dy*dy<spacing*spacing*.42){gameOver();break;}}
+for(let i=food.length-1;i>=0;i--){let f=food[i],dx=f.x-head.x,dy=f.y-head.y;if(dx*dx+dy*dy<=(f.r+spacing*.48)**2){score+=f.v;money+=f.v*income();best=Math.max(best,score);food.splice(i,1);spawn();ui();}}
+}
+function ball(x,y,r,color){let g=ctx.createRadialGradient(x-r*.35,y-r*.4,1,x,y,r);g.addColorStop(0,'#fff');g.addColorStop(.25,color);g.addColorStop(1,'#061b16');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#ffffff66';ctx.lineWidth=1;ctx.stroke();}
+function draw(){ctx.clearRect(0,0,W,H);ctx.strokeStyle='#ffffff0c';ctx.lineWidth=1;for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+food.forEach(f=>ball(f.x,f.y,f.r,f.c));
+for(let i=snake.length-1;i>=0;i--){let s=snake[i],r=spacing*.48*(1-i/snake.length*.2);ball(s.x,s.y,r,i===0?'#9bffad':'#31c76a');}
+if(snake.length){let h=snake[0],a=Math.atan2(dir.y,dir.x);for(let side of [-1,1]){let ex=h.x+Math.cos(a)*spacing*.2-Math.sin(a)*side*spacing*.2,ey=h.y+Math.sin(a)*spacing*.2+Math.cos(a)*side*spacing*.2;ctx.fillStyle='white';ctx.beginPath();ctx.arc(ex,ey,spacing*.12,0,Math.PI*2);ctx.fill();ctx.fillStyle='#09231a';ctx.beginPath();ctx.arc(ex+Math.cos(a)*2,ey+Math.sin(a)*2,spacing*.055,0,Math.PI*2);ctx.fill();}}
+}
+function loop(t){let dt=Math.min(.04,(t-last)/1000||0);last=t;if(!paused&&!over){acc+=dt;let interval=1/Math.max(.1,speed()*2.2);while(acc>=interval){step(interval);acc-=interval;}}draw();requestAnimationFrame(loop);}
+function setJoy(x,y){let m=Math.hypot(x,y),max=34;if(m>max){x=x/m*max;y=y/m*max;} $('joyKnob').style.transform=`translate(${x}px,${y}px)`;if(m>7)target={x,y};}
+let joy=$('joyArea'),active=false,cx=0,cy=0;
+joy.addEventListener('pointerdown',e=>{active=true;joy.setPointerCapture(e.pointerId);let r=joy.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;moveJoy(e);});
+function moveJoy(e){setJoy(e.clientX-cx,e.clientY-cy)}
+joy.addEventListener('pointermove',e=>{if(active)moveJoy(e)});function endJoy(){active=false;$('joyKnob').style.transform='translate(0,0)';}joy.addEventListener('pointerup',endJoy);joy.addEventListener('pointercancel',endJoy);
+$('pause').onclick=()=>{if(over)return;paused=!paused;$('pause').textContent=paused?'▶ Pokračovat':'⏸ Pauza';};
+$('restart').onclick=reset;$('again').onclick=reset;
+$('speed').onclick=()=>{let cost=(speedLevel+1)*10;if(speedLevel>=6||money<cost)return;money-=cost;speedLevel++;ui();};
+$('income').onclick=()=>{let cost=(incomeLevel+1)*10;if(incomeLevel>=10||money<cost)return;money-=cost;incomeLevel++;ui();};
+resize();requestAnimationFrame(loop);
+})();
+</script></body></html>
